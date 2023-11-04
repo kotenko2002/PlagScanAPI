@@ -9,5 +9,6 @@ namespace PlagScanAPI.Services.Authorization
         Task<TokensModel> Login(LoginDescriptor descriptor);
         Task Register(RegisterDescriptor descriptor);
         Task<TokensModel> RefreshToken(RefreshTokenDescriptor descriptor);
+        Task Revoke(string username);
     }
 }

@@ -1,18 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
-using PlagScanAPI.Entities;
-using PlagScanAPI.Infrastructure;
-using PlagScanAPI.Infrastructure.Exceptions;
+using PlagScanAPI.Infrastructure.Extensions;
 using PlagScanAPI.Models.Request;
-using PlagScanAPI.Models.Response;
 using PlagScanAPI.Services.Authorization;
 using PlagScanAPI.Services.Authorization.Descriptors;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PlagScanAPI.Controllers
 {
@@ -20,21 +11,15 @@ namespace PlagScanAPI.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly UserManager<ApplicationUser> _userManager;
-        private readonly RoleManager<IdentityRole> _roleManager;
-        private readonly IConfiguration _configuration;
         private readonly IAuthService _authService;
-        
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
         public AuthController(
-            UserManager<ApplicationUser> userManager,
-            RoleManager<IdentityRole> roleManager,
-            IConfiguration configuration,
-            IAuthService authService)
+            IAuthService authService,
+            IHttpContextAccessor httpContextAccessor)
         {
-            _userManager = userManager;
-            _roleManager = roleManager;
-            _configuration = configuration;
             _authService = authService;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         [HttpPost]
@@ -45,11 +30,6 @@ namespace PlagScanAPI.Controllers
                 Username = model.Username,
                 Password = model.Password
             });
-
-            if (tokens == null)
-            {
-                return Unauthorized();
-            }
 
             return Ok(tokens);
         }
@@ -83,16 +63,13 @@ namespace PlagScanAPI.Controllers
 
         [Authorize]
         [HttpPost]
-        [Route("revoke/{username}")]
-        public async Task<IActionResult> Revoke(string username)
+        [Route("revoke")]
+        public async Task<IActionResult> Revoke()
         {
-            var user = await _userManager.FindByNameAsync(username);
-            if (user == null) return BadRequest("Invalid user name");
+            var username = _httpContextAccessor.HttpContext.User.GetUsername();
+            await _authService.Revoke(username);
 
-            user.RefreshToken = null;
-            await _userManager.UpdateAsync(user);
-
-            return NoContent();
+            return Ok();
         }
 
         [Authorize]
