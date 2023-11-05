@@ -1,4 +1,6 @@
-﻿using System.IO.Compression;
+﻿using PlagScanAPI.Infrastructure.Exceptions;
+using System.IO.Compression;
+using System.Net;
 
 namespace PlagScanAPI.Services.ProjectsStorage
 {
@@ -31,6 +33,38 @@ namespace PlagScanAPI.Services.ProjectsStorage
                 }
             }
         }
+        public MemoryStream DownloadProject(string pathToProject)
+        {
+            var directoryPath = Path.Combine(basePath, pathToProject);
+
+            if (!Directory.Exists(directoryPath))
+            {
+                throw new ExceptionWithStatusCode(HttpStatusCode.BadRequest, "Project with this path was not found!");
+            }
+
+            var outputStream = new MemoryStream();
+
+            using (var zipArchive = new ZipArchive(outputStream, ZipArchiveMode.Create, true))
+            {
+                var files = Directory.GetFiles(directoryPath, "*.*", SearchOption.AllDirectories);
+
+                foreach (var file in files)
+                {
+                    var relativePath = file.Substring(directoryPath.Length + 1);
+                    var zipEntry = zipArchive.CreateEntry(relativePath);
+
+                    using (var zipStream = zipEntry.Open())
+                    using (var fileStream = File.OpenRead(file))
+                    {
+                        fileStream.CopyTo(zipStream);
+                    }
+                }
+            }
+
+            outputStream.Position = 0;
+
+            return outputStream;
+        }
 
         public string[] GetPathsToUsersDirectories(string ignoreDirectory)
         {
@@ -38,12 +72,10 @@ namespace PlagScanAPI.Services.ProjectsStorage
                 .Where(dirName => dirName != Path.Combine(basePath, ignoreDirectory))
                 .ToArray();
         }
-
         public string[] GetAllUserProjects(string pathToUserDirectory)
         {
             return Directory.GetDirectories(pathToUserDirectory).ToArray();
         }
-
         public string[] GetAllLines(string pathToProject, bool addBasePath = true)
         {
             string path = addBasePath ? Path.Combine(basePath, pathToProject) : pathToProject;

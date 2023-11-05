@@ -1,4 +1,5 @@
-﻿using PlagScanAPI.Services.ProjectsStorage;
+﻿using PlagScanAPI.Services.PlagiarismChecker.Views;
+using PlagScanAPI.Services.ProjectsStorage;
 
 namespace PlagScanAPI.Services.PlagiarismChecker
 {
@@ -11,13 +12,13 @@ namespace PlagScanAPI.Services.PlagiarismChecker
             _projectsStorageService = projectsStorageService;
         }
 
-        public void CheckPlagiarism(string projectName, string username)
+        public List<CheckResultView> CheckPlagiarism(string projectName, string username)
         {
             string[] newProjectLines = _projectsStorageService.GetAllLines(Path.Combine(username, projectName));
 
             string[] pathsToAnotherUsersDirs = _projectsStorageService.GetPathsToUsersDirectories(username);
 
-            var list = new List<(string pathToProject, double plagiarismPercentage)>();
+            var list = new List<CheckResultView>();
             foreach (var userDir in pathsToAnotherUsersDirs)
             {
                 string[] pathsToUserProjects = _projectsStorageService.GetAllUserProjects(userDir);
@@ -29,14 +30,14 @@ namespace PlagScanAPI.Services.PlagiarismChecker
                     int identicalLinesAmount = newProjectLines.Intersect(oldProjectLines).Count();
                     double plagiarismPercentage = Math.Round((identicalLinesAmount / (double)oldProjectLines.Length) * 100, 2);
 
-                    list.Add((GetLastTwoFolders(pathsToOldProject), plagiarismPercentage));
+                    list.Add(new CheckResultView() {
+                        PathToProject = GetLastTwoFolders(pathsToOldProject),
+                        PlagiarismPercentage = plagiarismPercentage
+                    });
                 }
             }
 
-            foreach (var item in list)
-            {
-                Console.WriteLine($"project \"{item.pathToProject}\" has {item.plagiarismPercentage}% of plagiarism");
-            }
+            return list.Where(r => r.PlagiarismPercentage > 5).ToList();
         }
 
         private string GetLastTwoFolders(string fullPath)

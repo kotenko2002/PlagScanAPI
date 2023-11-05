@@ -2,10 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using PlagScanAPI.Infrastructure.Extensions;
 using PlagScanAPI.Services.PlagiarismChecker;
+using PlagScanAPI.Services.PlagiarismChecker.Views;
 using PlagScanAPI.Services.ProjectsStorage;
-using System.IO.Compression;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PlagScanAPI.Controllers
 {
@@ -40,44 +38,18 @@ namespace PlagScanAPI.Controllers
             string username = _httpContextAccessor.HttpContext.User.GetUsername();
             string projectName = await _projectsStorageService.UnzipAndUploadProject(projectFile, username);
 
-            _plagCheckerService.CheckPlagiarism(projectName, username);
+            List<CheckResultView> result = _plagCheckerService.CheckPlagiarism(projectName, username);
 
-            return Ok();
+            return Ok(result);
         }
 
-        [HttpGet("downloadDirectory/{directoryName}")]
-        public IActionResult DownloadDirectory(string directoryName)
+        [HttpGet("download/{pathToProject}")]
+        public IActionResult DownloadDirectory(string pathToProject)
         {
-            var directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", directoryName);
+            MemoryStream project = _projectsStorageService.DownloadProject(pathToProject);
 
-            if (!Directory.Exists(directoryPath))
-            {
-                return NotFound("Directory not found");
-            }
-
-            var outputStream = new MemoryStream();
-
-            using (var zipArchive = new ZipArchive(outputStream, ZipArchiveMode.Create, true))
-            {
-                var files = Directory.GetFiles(directoryPath, "*.*", System.IO.SearchOption.AllDirectories);
-
-                foreach (var file in files)
-                {
-                    var relativePath = file.Substring(directoryPath.Length + 1);
-                    var zipEntry = zipArchive.CreateEntry(relativePath);
-
-                    using (var zipStream = zipEntry.Open())
-                    using (var fileStream = System.IO.File.OpenRead(file))
-                    {
-                        fileStream.CopyTo(zipStream);
-                    }
-                }
-            }
-
-            outputStream.Position = 0;
-
-            string zipName = directoryName.Substring(directoryName.IndexOf("\\") + 1);
-            return File(outputStream, "application/octet-stream", $"{zipName}.zip");
+            string zipName = pathToProject.Substring(pathToProject.IndexOf("\\") + 1);
+            return File(project, "application/octet-stream", $"{zipName}.zip");
         }
     }
 }
