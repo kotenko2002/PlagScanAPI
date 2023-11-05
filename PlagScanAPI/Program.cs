@@ -7,6 +7,8 @@ using PlagScanAPI.Entities.User;
 using PlagScanAPI.Infrastructure.Configuration;
 using PlagScanAPI.Infrastructure.Middlewares;
 using PlagScanAPI.Services.Authorization;
+using PlagScanAPI.Services.PlagiarismChecker;
+using PlagScanAPI.Services.ProjectsStorage;
 using PlagScanAPI.Storage.Configuration;
 using Swashbuckle.AspNetCore.Filters;
 using System.Text;
@@ -17,6 +19,8 @@ ConfigurationManager configuration = builder.Configuration;
 
 builder.Services.Configure<JwtOptions>(configuration.GetSection("JWT"));
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPlagiarismCheckerService, PlagiarismCheckerService>();
+builder.Services.AddScoped<IProjectsStorageService, LocalProjectsStorage>();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options => 
     options.UseSqlServer(configuration.GetConnectionString("ConnStr")));

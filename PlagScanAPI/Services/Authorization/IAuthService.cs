@@ -1,5 +1,4 @@
-﻿using PlagScanAPI.Entities;
-using PlagScanAPI.Models.Response;
+﻿using PlagScanAPI.Models.Response;
 using PlagScanAPI.Services.Authorization.Descriptors;
 
 namespace PlagScanAPI.Services.Authorization

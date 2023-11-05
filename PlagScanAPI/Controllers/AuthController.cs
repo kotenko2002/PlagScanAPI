@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PlagScanAPI.Entities.User;
 using PlagScanAPI.Infrastructure.Extensions;
 using PlagScanAPI.Models.Request;
+using PlagScanAPI.Models.Response;
 using PlagScanAPI.Services.Authorization;
 using PlagScanAPI.Services.Authorization.Descriptors;
 
@@ -26,7 +28,7 @@ namespace PlagScanAPI.Controllers
         [Route("login")]
         public async Task<IActionResult> Login([FromBody] LoginModel model)
         {
-            var tokens = await _authService.Login(new LoginDescriptor() {
+            TokensModel tokens = await _authService.Login(new LoginDescriptor() {
                 Username = model.Username,
                 Password = model.Password
             });
@@ -52,7 +54,7 @@ namespace PlagScanAPI.Controllers
         [Route("refresh-token")]
         public async Task<IActionResult> RefreshToken(RefreshTokenModel model)
         {
-            var newTokens = await _authService.RefreshToken(new RefreshTokenDescriptor()
+            TokensModel newTokens = await _authService.RefreshToken(new RefreshTokenDescriptor()
             {
                 AccessToken = model.AccessToken,
                 RefreshToken = model.RefreshToken
@@ -61,21 +63,29 @@ namespace PlagScanAPI.Controllers
             return Ok(newTokens);
         }
 
-        [Authorize]
         [HttpPost]
         [Route("revoke")]
+        [Authorize]
         public async Task<IActionResult> Revoke()
         {
-            var username = _httpContextAccessor.HttpContext.User.GetUsername();
+            string username = _httpContextAccessor.HttpContext.User.GetUsername();
             await _authService.Revoke(username);
 
             return Ok();
         }
 
-        [Authorize]
         [HttpGet]
-        [Route("test")]
-        public IActionResult TestEndpoint()
+        [Route("test/admin")]
+        [Authorize(Roles = UserRoles.Admin)]
+        public IActionResult TestAdminEndpoint()
+        {
+            return Ok();
+        }
+
+        [HttpGet]
+        [Route("test/user")]
+        [Authorize(Roles = UserRoles.User)]
+        public IActionResult TestUserEndpoint()
         {
             return Ok();
         }
