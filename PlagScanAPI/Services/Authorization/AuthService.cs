@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using PlagScanAPI.Entities;
-using PlagScanAPI.Infrastructure;
+using PlagScanAPI.Entities.User;
+using PlagScanAPI.Infrastructure.Configuration;
 using PlagScanAPI.Infrastructure.Exceptions;
 using PlagScanAPI.Models.Response;
 using PlagScanAPI.Services.Authorization.Descriptors;
@@ -16,45 +17,38 @@ namespace PlagScanAPI.Services.Authorization
     public class AuthService : IAuthService
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly IConfiguration _configuration;
+        private readonly JwtOptions _jwtOptions;
 
         public AuthService(
             UserManager<ApplicationUser> userManager,
-            IConfiguration configuration)
+            IOptions<JwtOptions> jwtOptions)
         {
             _userManager = userManager;
-            _configuration = configuration;
+            _jwtOptions = jwtOptions.Value;
         }
 
         public async Task<TokensModel> Login(LoginDescriptor descriptor)
         {
-            var user = await _userManager.FindByNameAsync(descriptor.Username);
+            ApplicationUser user = await _userManager.FindByNameAsync(descriptor.Username);
             if (user == null || !await _userManager.CheckPasswordAsync(user, descriptor.Password))
             {
                 throw new ExceptionWithStatusCode(HttpStatusCode.Unauthorized, "Wrong username or password");
             }
 
-            var userRoles = await _userManager.GetRolesAsync(user);
+            IList<string> userRoles = await _userManager.GetRolesAsync(user);
 
             var authClaims = new List<Claim>
             {
                 new Claim(ClaimTypes.Name, user.UserName),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             };
+            authClaims.AddRange(userRoles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-            foreach (var userRole in userRoles)
-            {
-                authClaims.Add(new Claim(ClaimTypes.Role, userRole));
-            }
-
-            var accessToken = GenerateAccessToken(authClaims);
-            var refreshToken = GenerateRefreshToken();
-
-            _ = int.TryParse(_configuration["JWT:RefreshTokenValidityInDays"], out int refreshTokenValidityInDays);
+            JwtSecurityToken accessToken = GenerateAccessToken(authClaims);
+            string refreshToken = GenerateRefreshToken();
 
             user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiryTime = DateTime.Now.AddDays(refreshTokenValidityInDays);
-
+            user.RefreshTokenExpiryTime = DateTime.Now.AddDays(_jwtOptions.RefreshTokenValidityInDays);
             await _userManager.UpdateAsync(user);
 
             return new TokensModel(accessToken, user);
@@ -62,20 +56,20 @@ namespace PlagScanAPI.Services.Authorization
 
         public async Task Register(RegisterDescriptor descriptor)
         {
-            var existsUser = await _userManager.FindByNameAsync(descriptor.Username);
+            ApplicationUser existsUser = await _userManager.FindByNameAsync(descriptor.Username);
             if (existsUser != null)
             {
                 throw new ExceptionWithStatusCode(HttpStatusCode.Conflict, "User already exists!");
             }
 
-            ApplicationUser user = new()
+            var user = new ApplicationUser()
             {
                 Email = descriptor.Email,
                 SecurityStamp = Guid.NewGuid().ToString(),
                 UserName = descriptor.Username
             };
 
-            var result = await _userManager.CreateAsync(user, descriptor.Password);
+            IdentityResult result = await _userManager.CreateAsync(user, descriptor.Password);
             if (!result.Succeeded)
             {
                 throw new ExceptionWithStatusCode(HttpStatusCode.InternalServerError, "User creation failed!");
@@ -89,28 +83,25 @@ namespace PlagScanAPI.Services.Authorization
             string accessToken = descriptor.AccessToken;
             string refreshToken = descriptor.RefreshToken;
 
-            var principal = GetPrincipalFromExpiredToken(accessToken);
+            ClaimsPrincipal principal = GetPrincipalFromExpiredToken(accessToken);
             if (principal == null)
             {
                 throw new ExceptionWithStatusCode(HttpStatusCode.BadRequest, "Invalid access token or refresh token");
             }
 
             string username = principal.Identity.Name;
-            var user = await _userManager.FindByNameAsync(username);
+            ApplicationUser user = await _userManager.FindByNameAsync(username);
 
             if (user == null || user.RefreshToken != refreshToken || user.RefreshTokenExpiryTime <= DateTime.Now)
             {
                 throw new ExceptionWithStatusCode(HttpStatusCode.BadRequest, "Invalid access token or refresh token");
             }
 
-            var newAccessToken = GenerateAccessToken(principal.Claims.ToList());
-            var newRefreshToken = GenerateRefreshToken();
-
-            _ = int.TryParse(_configuration["JWT:RefreshTokenValidityInDays"], out int refreshTokenValidityInDays);
+            JwtSecurityToken newAccessToken = GenerateAccessToken(principal.Claims.ToList());
+            string newRefreshToken = GenerateRefreshToken();
 
             user.RefreshToken = newRefreshToken;
-            user.RefreshTokenExpiryTime = DateTime.Now.AddDays(refreshTokenValidityInDays);
-
+            user.RefreshTokenExpiryTime = DateTime.Now.AddDays(_jwtOptions.RefreshTokenValidityInDays);
             await _userManager.UpdateAsync(user);
 
             return new TokensModel(newAccessToken, user);
@@ -118,7 +109,7 @@ namespace PlagScanAPI.Services.Authorization
 
         public async Task Revoke(string username)
         {
-            var user = await _userManager.FindByNameAsync(username);
+            ApplicationUser user = await _userManager.FindByNameAsync(username);
             if (user == null)
             {
                 throw new ExceptionWithStatusCode(HttpStatusCode.BadRequest, "Invalid access token");
@@ -130,18 +121,15 @@ namespace PlagScanAPI.Services.Authorization
 
         private JwtSecurityToken GenerateAccessToken(List<Claim> authClaims)
         {
-            var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
-            _ = int.TryParse(_configuration["JWT:TokenValidityInMinutes"], out int tokenValidityInMinutes);
+            var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Secret));
 
-            var token = new JwtSecurityToken(
-                issuer: _configuration["JWT:ValidIssuer"],
-                audience: _configuration["JWT:ValidAudience"],
-                expires: DateTime.Now.AddMinutes(tokenValidityInMinutes),
+            return new JwtSecurityToken(
+                issuer: _jwtOptions.ValidIssuer,
+                audience: _jwtOptions.ValidAudience,
+                expires: DateTime.Now.AddMinutes(_jwtOptions.TokenValidityInMinutes),
                 claims: authClaims,
                 signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
             );
-
-            return token;
         }
         private string GenerateRefreshToken()
         {
@@ -157,14 +145,18 @@ namespace PlagScanAPI.Services.Authorization
                 ValidateAudience = false,
                 ValidateIssuer = false,
                 ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"])),
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Secret)),
                 ValidateLifetime = false
             };
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
-            if (securityToken is not JwtSecurityToken jwtSecurityToken || !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+            ClaimsPrincipal principal = new JwtSecurityTokenHandler()
+                .ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
+
+            if (securityToken is not JwtSecurityToken jwtSecurityToken ||
+                !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+            {
                 throw new SecurityTokenException("Invalid token");
+            }
 
             return principal;
         }

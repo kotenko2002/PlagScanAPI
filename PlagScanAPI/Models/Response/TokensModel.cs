@@ -1,4 +1,4 @@
-﻿using PlagScanAPI.Entities;
+﻿using PlagScanAPI.Entities.User;
 using System.IdentityModel.Tokens.Jwt;
 
 namespace PlagScanAPI.Models.Response

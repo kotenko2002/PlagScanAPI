@@ -3,7 +3,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using PlagScanAPI.Entities;
+using PlagScanAPI.Entities.User;
+using PlagScanAPI.Infrastructure.Configuration;
 using PlagScanAPI.Infrastructure.Middlewares;
 using PlagScanAPI.Services.Authorization;
 using PlagScanAPI.Storage.Configuration;
@@ -14,6 +15,7 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 ConfigurationManager configuration = builder.Configuration;
 
+builder.Services.Configure<JwtOptions>(configuration.GetSection("JWT"));
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options => 

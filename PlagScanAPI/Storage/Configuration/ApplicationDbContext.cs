@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using PlagScanAPI.Entities;
+using PlagScanAPI.Entities.User;
 
 namespace PlagScanAPI.Storage.Configuration
 {

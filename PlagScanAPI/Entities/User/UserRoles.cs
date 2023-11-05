@@ -1,4 +1,4 @@
-﻿namespace PlagScanAPI.Infrastructure
+﻿namespace PlagScanAPI.Entities.User
 {
     public static class UserRoles
     {
